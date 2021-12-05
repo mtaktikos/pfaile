@@ -290,26 +290,22 @@ void init_game (void) {
   /* set up a new game: */
 
   int i;
-	// 1 is a pawn
-	// 7 is a rook
-	// 3 is a knight
-	// 11 is a bishop
-	// 9 is a queen
-	// 5 is a king
 
   int init_board[144] = {
+  0,0,0,0,0,0,5,0,0,0,0,0,
   0,0,0,0,0,0,0,0,0,0,0,0,
-  0,0,0,0,0,0,0,0,0,0,0,0,
-  0,0,7,3,11,9,5,11,3,7,0,0,
+  0,0,13,13,13,13,13,13,13,13,0,0,
+  /*0,0,7,3,11,9,5,11,3,7,0,0,*/
   0,0,1,1,1,1,1,1,1,1,0,0,
   0,0,13,13,13,13,13,13,13,13,0,0,
   0,0,13,13,13,13,13,13,13,13,0,0,
   0,0,13,13,13,13,13,13,13,13,0,0,
   0,0,13,13,13,13,13,13,13,13,0,0,
   0,0,2,2,2,2,2,2,2,2,0,0,
-  0,0,8,4,12,10,6,12,4,8,0,0,
+  0,0,13,13,13,13,13,13,13,13,0,0,
+  /*0,0,8,4,12,10,6,12,4,8,0,0,*/
   0,0,0,0,0,0,0,0,0,0,0,0,
-  0,0,0,0,0,0,0,0,0,0,0,0
+  0,0,0,0,0,0,6,0,0,0,0,0
   };
 
 
@@ -646,9 +642,7 @@ void reset_piece_square (void) {
      use that piece number for other things: */
   pieces[0] = 0;
   num_pieces = 0;
-//pieces  - tells where each piece is positioned
-//squares - tells for each piece found how many pieces there are on 
-//before it.
+
   for (i = 26; i < 118; i++) {
     if (board[i] != frame && board[i] != npiece) {
       pieces[++num_pieces] = i;

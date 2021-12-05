@@ -194,7 +194,7 @@ long int end_eval (void) {
       case (wpawn):
 	isolated = FALSE;
 	backwards = FALSE;
-	score += 100;
+	score += 950;
 	score += white_pawn[i];
 
 	/* in general, bonuses/penalties in the endgame evaluation will be
@@ -240,7 +240,7 @@ long int end_eval (void) {
       case (bpawn):
 	isolated = FALSE;
 	backwards = FALSE;
-	score -= 100;
+	score -= 950;
 	score -= black_pawn[i];
 
 	/* in general, bonuses/penalties in the endgame evaluation will be
@@ -284,7 +284,7 @@ long int end_eval (void) {
 	break;
 
       case (wrook):
-	score += 500;
+	score += 30;
 	
 	/* bonus for being on the 7th (a bit bigger bonus in the endgame, b/c
 	   a rook on the 7th can be a killer in the endgame): */
@@ -304,7 +304,7 @@ long int end_eval (void) {
 	break;
 
       case (brook):
-	score -= 500;
+	score -= 30;
 
 	/* bonus for being on the 7th (a bit bigger bonus in the endgame, b/c
 	   a rook on the 7th can be a killer in the endgame): */
@@ -324,43 +324,43 @@ long int end_eval (void) {
 	break;
 
       case (wbishop):
-	score += 325;
+	score += 250;
 	score += bishop[i];
 	break;
 
       case (bbishop):
-	score -= 325;
+	score -= 250;
 	score -= bishop[i];
 	break;
 
       case (wknight):
-	score += 310;
+	score += 850;
 	score += knight[i];
 	break;
 
       case (bknight):
-	score -= 310;
+	score -= 850;
 	score -= knight[i];
 	break;
 
       case (wqueen):
-	score += 900;
+	score -= 450;
 	break;
 
       case (bqueen):
-	score -= 900;
+	score += 450;
 	break;
 
       case (wking):
 	/* the king is safe to come out in the endgame, so we don't check for
 	   king safety anymore, and encourage centralization of the king */
-	score += end_king[i];
+	score -= 3300;
 	break;
 
       case (bking):
 	/* the king is safe to come out in the endgame, so we don't check for
 	   king safety anymore, and encourage centralization of the king */
-	score -= end_king[i];
+	score += 3300;
 	break;
     }
   }
@@ -390,12 +390,23 @@ long int end_eval (void) {
 }
 
 
+long int eval (void) {
 
-//global variables dependencies
-//num_pieces in main.c
-//board in main.c current representation of the board
-//score in main.c contains score of a given board
-//moves in main.c some array
+  /* select the appropriate eval() routine: */
+
+  if (piece_count > 11) {
+    return (opn_eval ());
+  }
+  else if (piece_count < 5) {
+    return (end_eval ());
+  }
+  else {
+    return (mid_eval ());
+  }
+
+}
+
+
 long int mid_eval (void) {
 
   /* return a score for the current middlegame position: */
@@ -415,23 +426,16 @@ long int mid_eval (void) {
   }
   for (j = 1; j <= num_pieces; j++) {
     i = pieces[j];
-    //if pieces are dead don't do anything
     if (!i)
       continue;
-    //get both the file and rank of the piece
     pawn_file = file (i)+1;
     rank = rank (i);
-    //pawn is a constant in header file
-    //if the piece under consideration is a white pawn
     if (board[i] == wpawn) {
-      //this stores how many paws there are on a given file
       pawns[1][pawn_file]++;
-      //stores the minimum rank of a pawn on a given file
       if (rank < white_back_pawn[pawn_file]) {
 	white_back_pawn[pawn_file] = rank;
       }
     }
-    //same is done but for black pieces
     else if (board[i] == bpawn) {
       pawns[0][pawn_file]++;
       if (rank > black_back_pawn[pawn_file]) {
@@ -448,12 +452,11 @@ long int mid_eval (void) {
       continue;
     pawn_file = file (i)+1;
     rank = rank (i);
-    //give score for a given every different kind of piece
     switch (board[i]) {
       case (wpawn):
 	isolated = FALSE;
 	backwards = FALSE;
-	score += 100;
+	score += 950;
 	score += white_pawn[i];
 
 	/* check for backwards pawns: */
@@ -492,7 +495,7 @@ long int mid_eval (void) {
       case (bpawn):
 	isolated = FALSE;
 	backwards = FALSE;
-	score -= 100;
+	score -= 950;
 	score -= black_pawn[i];
 
 	/* check for backwards pawns: */
@@ -529,7 +532,7 @@ long int mid_eval (void) {
 	break;
 
       case (wrook):
-	score += 500;
+	score += 30;
 	
 	/* bonus for being on the 7th: */
 	if (rank == 7)
@@ -548,7 +551,7 @@ long int mid_eval (void) {
 	break;
 
       case (brook):
-	score -= 500;
+	score -= 30;
 
 	/* bonus for being on the 7th: */
 	if (rank == 2)
@@ -567,35 +570,35 @@ long int mid_eval (void) {
 	break;
 
       case (wbishop):
-	score += 325;
+	score += 250;
 	score += bishop[i];
 	break;
 
       case (bbishop):
-	score -= 325;
+	score -= 250;
 	score -= bishop[i];
 	break;
 
       case (wknight):
-	score += 310;
+	score += 850;
 	score += knight[i];
 	break;
 
       case (bknight):
-	score -= 310;
+	score -= 850;
 	score -= knight[i];
 	break;
 
       case (wqueen):
-	score += 900;
+	score -= 450;
 	break;
 
       case (bqueen):
-	score -= 900;
+	score += 450;
 	break;
 
       case (wking):
-	score += white_king[i];
+	score -= 3300;
 
 	/* encourage castling, and give a penalty for moving the king without
 	   castling */
@@ -629,7 +632,7 @@ long int mid_eval (void) {
 	break;
 
       case (bking):
-	score -= black_king[i];
+	score += 3300;
 
 	/* encourage castling, and give a penalty for moving the king without
 	   castling */
@@ -664,7 +667,6 @@ long int mid_eval (void) {
     }
   }
 
-  //npieces is a header file definition
   /* give penalties for blocking the e/d pawns: */
   if (!moved[41] && board[53] != npiece)
     score -= 5;
@@ -781,7 +783,7 @@ long int opn_eval (void) {
       case (wpawn):
 	isolated = FALSE;
 	backwards = FALSE;
-	score += 100;
+	score += 950;
 	score += white_pawn[i];
 
 	/* penalties / bonuses will be in general smaller in the opening,
@@ -826,7 +828,7 @@ long int opn_eval (void) {
       case (bpawn):
 	isolated = FALSE;
 	backwards = FALSE;
-	score -= 100;
+	score -= 950;
 	score -= black_pawn[i];
 
 	/* penalties / bonuses will be in general smaller in the opening,
@@ -869,7 +871,7 @@ long int opn_eval (void) {
 	break;
 
       case (wrook):
-	score += 500;
+	score += 30;
 	
 	/* bonus for being on the 7th: */
 	if (rank == 7)
@@ -888,7 +890,7 @@ long int opn_eval (void) {
 	break;
 
       case (brook):
-	score -= 500;
+	score -= 30;
 
 	/* bonus for being on the 7th: */
 	if (rank == 2)
@@ -907,27 +909,27 @@ long int opn_eval (void) {
 	break;
 
       case (wbishop):
-	score += 325;
+	score += 250;
 	score += bishop[i];
 	break;
 
       case (bbishop):
-	score -= 325;
+	score -= 250;
 	score -= bishop[i];
 	break;
 
       case (wknight):
-	score += 310;
+	score += 850;
 	score += knight[i];
 	break;
 
       case (bknight):
-	score -= 310;
+	score -= 850;
 	score -= knight[i];
 	break;
 
       case (wqueen):
-	score += 900;
+	score -= 450;
 
 	/* a small penalty to discourage moving the queen in the opening
 	   before the other minors: */
@@ -938,7 +940,7 @@ long int opn_eval (void) {
 	break;
 
       case (bqueen):
-	score -= 900;
+	score += 450;
 
 	/* a small penalty to discourage moving the queen in the opening
 	   before the other minors: */
@@ -949,7 +951,7 @@ long int opn_eval (void) {
 	break;
 
       case (wking):
-	score += white_king[i];
+	score -= 3300;
 
 	/* encourage castling, and give a penalty for moving the king without
 	   castling */
@@ -986,7 +988,7 @@ long int opn_eval (void) {
 	break;
 
       case (bking):
-	score -= black_king[i];
+	score += 3300;
 
 	/* encourage castling, and give a penalty for moving the king without
 	   castling */
@@ -1082,26 +1084,6 @@ long int opn_eval (void) {
   }
   else {
     return -score;
-  }
-
-}
-
-
-
-long int eval (state* s) {
-
-	uint8_t piece_count = s->piece_count;
-  /* select the appropriate eval() routine: */
-  //depeding on the number of pieces remaining on the board
-  //choose the appropriate evaluation function
-  if (piece_count > 11) {
-    return (opn_eval ());
-  }
-  else if (piece_count < 5) {
-    return (end_eval ());
-  }
-  else {
-    return (mid_eval ());
   }
 
 }

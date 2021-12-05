@@ -178,8 +178,8 @@ void perft (int depth) {
   }
 
 }
-/*OUT HEART*/
-//fix this
+
+
 long int qsearch (int alpha, int beta, int depth) {
 
   /* perform a quiscense search on the current node using alpha-beta with
@@ -491,12 +491,9 @@ long int search (int alpha, int beta, int depth, bool do_null) {
 
   /* check for mate / stalemate: */
   if (no_moves) {
-    if (in_check ()) {
+   
       alpha = -INF+ply;
-    }
-    else {
-      alpha = 0;
-    }
+   
   }
   else {
     /* check the 50 move rule if no mate situation is on the board: */
@@ -625,17 +622,12 @@ move_s search_root (int alpha, int beta, int depth) {
 
   /* check to see if we are mated / stalemated: */
   if (no_moves) {
-    if (in_check ()) {
       if (white_to_move == 1) {
 	result = white_is_mated;
       }
       else {
 	result = black_is_mated;
       }
-    }
-    else {
-      result = stalemate;
-    }
   }
   else {
     /* check for draw by the 50 move rule: */
