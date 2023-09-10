@@ -1,64 +1,29 @@
-
 CC = gcc
-OPT = #-O3
-PFLAGS = -Wall -Werror
-FLAGS = -g -Wall #-DNDEBUG
-PROF = -pg
+FLAGS = -O2 -Wall
 
-# Release Build:
+all:	faile.exe
 
-objects = faile.o utils.o moves.o search.o eval.o hash.o rand.o book.o
-parallel_objects = pfaile.o psearch.o putils.o ppqueue.o chess_plug.o pfaile_dep.o pmoves.o peval.o ptest.o
+faile.exe:	eval.o faile.o moves.o search.o utils.o xboard.o book.o
+	$(CC) -o faile.exe eval.o faile.o moves.o search.o utils.o xboard.o book.o
 
-headers = extvars.h faile.h protos.h ptree.c
-parallel_headers = pprotos.h pfaile_dep.h
+eval.o:	eval.c extvars.h faile.h protos.h
+	$(CC) $(FLAGS) -c -o eval.o eval.c
 
-# Parallel Faile Build
+faile.o:	faile.c extvars.h faile.h protos.h
+	$(CC) $(FLAGS) -c -o faile.o faile.c
 
-pfaile: $(parallel_objects)
-	$(CC) $(OPT) $(PFLAGS) $(FALGS) -o pfaile $(parallel_objects) -lm -lpthread
+moves.o:	moves.c extvars.h faile.h protos.h
+	$(CC) $(FLAGS) -c -o moves.o moves.c
 
-pprotos.h: pfaile_dep.h
+search.o:	search.c extvars.h faile.h protos.h
+	$(CC) $(FLAGS) -c -o search.o search.c
 
-%.o: %.c $(parallel_headers)
-	$(CC) $(OPT) $(PFLAGS) $(FLAGS) -c -o $@ $<
+utils.o:	utils.c extvars.h faile.h protos.h
+	$(CC) $(FLAGS) -c -o utils.o utils.c
 
-# Profiling Parallel Faile Build:
+xboard.o:	xboard.c extvars.h faile.h protos.h
+	$(CC) $(FLAGS) -c -o xboard.o xboard.c
 
-pr_parallel_objects = pfaile_pr.o psearch_pr.o putils_pr.o ppqueue_pr.o chess_plug_pr.o pfaile_dep_pr.o pmoves_pr.o peval_pr.o ptest_pr.o
-
-
-pfaile_pr: $(pr_parallel_objects)
-	$(CC) $(PROF) $(OPT) $(FLAGS) -o pr_pfaile $(pr_parallel_objects) -lm -lpthread
-
-%_pr.o: %.c
-	$(CC) $(PROF) $(OPT) $(PFLAGS) $(FLAGS) -c -o $@ $<
-
-
-
-all:	pfaile
-
-clean:
-	rm -f *.o
-	rm -f *.out
-	rm -f *~
-
-clean_win:
-	del *.o
-	del *~
-
-touch:
-	touch *.c
-	touch *.h
-new:
-	rm -f *.o
-	rm -f *.out
-	touch *.c
-	touch *.h
-
-profile:	faile_pr
-
-emacs:
-	rm -f *~
-
+book.o:	book.c extvars.h faile.h protos.h
+	$(CC) $(FLAGS) -c -o book.o book.c
 #EOF
