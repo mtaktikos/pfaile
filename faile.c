@@ -1,344 +1,361 @@
-/*
-MIT License
-
-Copyright (c) 2000 Adrien M. Regimbald
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
-
 /**************************************************
- * Faile version 1.4                              *
- * Author: Adrien Regimbald                       *
- * E-mail: adrien@ee.ualberta.ca                  *
- * Web Page: http://www.ee.ualberta.ca/~adrien/   *
+ *   Faile version 0.6                            *
+ *   Author: Adrien Regimbald                     *
+ *   E-mail: adrien@gpu.srv.ualberta.ca           *
+ *   Web Page: http://www.ualberta.ca/~adrien/    *
  *                                                *
- * File: faile.c                                  *
- * Purpose: main program.                         *
+ *   File: Faile.c                                *
+ *   Purpose: Main program.                       *
  **************************************************/
 
 #include "faile.h"
 #include "protos.h"
 
-char divider[50] = "-------------------------------------------------";
-move_s dummy = {0,0,0,0,0,0,0};
+#ifdef lines
+int line[20][2];
+int line_depth;
+FILE *lines_out;
+#endif
 
-int board[144], moved[144], ep_square, white_to_move, wking_loc,
-  bking_loc, white_castled, black_castled, result, ply, pv_length[PV_BUFF],
-  history_h[144][144], pieces[33], squares[144], num_pieces, i_depth, fifty,
-  fifty_move[PV_BUFF], game_ply;
+int white_to_move = 1;
+Bool game_end = FALSE;
+int castle_flag = 0;
+long int nodes,qnodes;
+double search_time;
+double clock_elapsed;
+Bool white_castled, black_castled;
+int wking_loc = 30 , bking_loc = 114;
+int comp_color;
+End_of_game result;
+Bool new_game;
+int move_num;
+int ply;
+white_black history[500];
+Bool captures = FALSE;
+Bool time_failure, time_exit;
+double time_for_move;
+time_t time0;
+time_t search_start;
+clock_t clock0;
+double qnodes_perc;
+int pv_length[100];
+move_s pv[100][100];
+Bool searching_pv;
+int history_h[144][144];
+int iterative_depth;
+move_s pv_empty[100][100];
+Bool xboard_mode;
+int num_pieces;
+int pieces[33];
+int squares[144];
+int current_score;
+Bool post;
+double time_left, increment;
+long int moves_to_tc, minutes_per_game;
+double time_cushion;
+double opp_time;
+char book[5000][81];
+int num_book_lines;
+int book_ply;
+Bool use_book;
+char opening_history[81];
+int rep_kludge[500][144];
+int rep_ply;
+int fifty_move[500];
+int fifty;
+move_s junk_move = {0, 0, 0, 0, 0, 0, 0};
+move_s killer1[100];
+move_s killer2[100];
+int killer_scores[100];
+Bool is_endgame;
 
-long int nodes, raw_nodes, qnodes, piece_count, killer_scores[PV_BUFF],
-  killer_scores2[PV_BUFF], moves_to_tc, min_per_game, inc, time_left,
-  opp_time, time_cushion, time_for_move, cur_score, start_piece_count,
-  last_root_score;
+FILE *stream;
 
-bool xb_mode, captures, searching_pv, post, time_exit, time_failure,
-  allow_more_time, bad_root_score;
+int board[144] = {
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  7,  3, 11,  9,  5, 11,  3,  7,  0,  0,
+    0,  0,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,
+    0,  0, 13, 13, 13, 13, 13, 13, 13, 13,  0,  0,
+    0,  0, 13, 13, 13, 13, 13, 13, 13, 13,  0,  0,
+    0,  0, 13, 13, 13, 13, 13, 13, 13, 13,  0,  0,
+    0,  0, 13, 13, 13, 13, 13, 13, 13, 13,  0,  0,
+    0,  0,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,
+    0,  0,  8,  4, 12, 10,  6, 12,  4,  8,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0
+    };
 
-move_s pv[PV_BUFF][PV_BUFF], killer1[PV_BUFF], killer2[PV_BUFF],
- killer3[PV_BUFF];
+int moved[144] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    };
 
-rtime_t start_time;
+int main(int argc, char *argv[]) {
 
-d_long h_values[14][144], ep_h_values[144], wck_h_values[2], wcq_h_values[2],
-  bck_h_values[2], bcq_h_values[2], color_h_values[2], cur_pos, 
-  rep_history[PV_BUFF];
+   move_s comp_move;
+   char input_reset_board[2], input[256], human_color[2];
+   Bool setup_return;
+   char color[2];
+   char coord_move[6];
 
-hash_s *hash_table;
+   use_book = init_book();
+   if (!use_book)
+      printf("Error opening book file, faile.opn\n");
 
-unsigned long int hash_mask, hash_max_mb = 0;
+   stream = stdout;
 
+   if (argc == 2 && !strcmp(argv[1], "-xboard"))
+      xboard();
 
-int main (int argc, char *argv[]) {
+   printf("Faile version 0.6\nby Adrien (Reggie) Regimbald\n\n");
+   rdelay(2);
 
-  char input[STR_BUFF], *p, output[STR_BUFF];
-  move_s move, comp_move;
-  int depth = 4, comp_color;
-  bool force_mode, show_board;
-  double nps, elapsed;
-  clock_t cpu_start = 0, cpu_end = 0;
+   new_game = TRUE;
 
-  parse_cmdline (argc, argv);
-  start_up ();
-  init_hash_values ();
-  init_hash_tables ();
-  init_game ();
-  init_book ();
-  xb_mode = FALSE;
-  force_mode = FALSE;
-  comp_color = 0;
-  show_board = TRUE;
-  
-  setbuf (stdout, NULL);
-  setbuf (stdin, NULL);
+   while(new_game) {
 
-  /* keep looping for input, and responding to it: */
-  while (TRUE) {
+      init_game();
 
-    /* case where it's the computer's turn to move: */
-    if (comp_color == white_to_move && !force_mode) {
-      nodes = 0;
-      qnodes = 0;
-      ply = 0;
+      printf("What color would you like to play? (w/b):  ");
+      rinput(human_color, 1);
+      if (tolower(human_color[0]) == 'w') comp_color = 2;
+      else comp_color = 1;
 
-      start_time = rtime ();
-      cpu_start = clock ();
-      comp_move = think ();
-      cpu_end = clock ();
-
-      /* check for a game end: */
-      if (((comp_color == 1 && result != white_is_mated) ||
-	  (comp_color == 0 && result != black_is_mated)) &&
-	  result != stalemate && result != draw_by_fifty &&
-	  result != draw_by_rep) {
-	
-	comp_to_coord (comp_move, output);
-
-	make (&comp_move, 0);
-
-	/* check to see if we draw by rep/fifty after our move: */
-	if (is_draw ()) {
-	  result = draw_by_rep;
-	}
-	else if (fifty > 100) {
-	  result = draw_by_fifty;
-	}
-
-	reset_piece_square ();
-	/* check to see if we mate our opponent with our current move: */
-	if (!result) {
-	  if (xb_mode) {
-	    printf ("move %s\n", output);
-	  }
-	  else {
-	    printf ("\n%s\n", output);
-	  }
-	}
-	else {
-	  if (xb_mode) {
-	    printf ("move %s\n", output);
-	  }
-	  else {
-	    printf ("\n%s\n", output);
-	  }
-	  if (result == white_is_mated) {
-	    printf ("0-1 {Black Mates}\n");
-	  }
-	  else if (result == black_is_mated) {
-	    printf ("1-0 {White Mates}\n");
-	  }
-	  else if (result == draw_by_fifty) {
-	    printf ("1/2-1/2 {Fifty move rule}\n");
-	  }
-	  else if (result == draw_by_rep) {
-	    printf ("1/2-1/2 {3 fold repetition}\n");
-	  }
-	  else {
-	    printf ("1/2-1/2 {Draw}\n");
-	  }
-	}
-      }
-      /* we have been mated or there is a draw: */
-      else {
-	if (result == white_is_mated) {
-	  printf ("0-1 {Black Mates}\n");
-	}
-	else if (result == black_is_mated) {
-	  printf ("1-0 {White Mates}\n");
-	}
-	else if (result == stalemate) {
-	  printf ("1/2-1/2 {Stalemate}\n");
-	}
-	else if (result == draw_by_fifty) {
-	  printf ("1/2-1/2 {Fifty move rule}\n");
-	}
-	else if (result == draw_by_rep) {
-	  printf ("1/2-1/2 {3 fold repetition}\n");
-	}
-	else {
-	  printf ("1/2-1/2 {Draw}\n");
-	}
+      printf("Would you like to set up the board? (y/n):  ");
+      rinput(input_reset_board, 1);
+      setup_return = FALSE;
+      if (tolower(input_reset_board[0]) == 'y') {
+         while (setup_return == FALSE) {
+            printf("Please enter an EPD string:\n");
+            parse_epd();
+            setup_return = verify_board();
+         }
       }
 
-    }
+      if (white_to_move == 1) color[0] = 'w';
+      else color[0] = 'b';
 
-    /* get our input: */
-    if (!xb_mode) {
-      if (show_board && strcmp (input, "help")) {
-	printf ("\n");
-	display_board (stdout, 1-comp_color);
-      }
-      printf ("Faile> ");
-      rinput (input, STR_BUFF, stdin);
-    }
-    else {
-      rinput (input, STR_BUFF, stdin);
-    }
+      /* print a copy of board so something can be seen while comp. is
+         thinking on the first move: */
+      rclrscr();
+      print_history(1);
+      printf("\n");
+      print_pos();
 
-    /* check to see if we have a move.  If it's legal, play it. */
-    if (is_valid_comp (pgn_to_comp (input))) {
-      /* good SAN input style move */
-      move = pgn_to_comp (input);
-      make (&move, 0);
-      reset_piece_square ();
-      if (show_board) {
-	printf ("\n");
-	display_board (stdout, 1-comp_color);
-      }
-    }
-    else if (is_move (&input[0])) {
-      /* good coordinate style input move */
-      if (verify_coord (input, &move)) {
-	make (&move, 0);
-	reset_piece_square ();
-	if (show_board) {
-	  printf ("\n");
-	  display_board (stdout, 1-comp_color);
-	}
-      }
-      else {
-	printf ("Illegal move: %s\n", input);
-      }
-    }
-    else {
+      while (!game_end) {
 
-      /* make everything lower case for convenience: */
-      for (p = input; *p; p++) *p = tolower (*p);
+         /* computer's move: */
+         if ((comp_color %2) == (white_to_move %2)) {
 
-      /* command parsing: */
-      if (!strcmp (input, "quit") || !strcmp (input, "exit")) {
-	shut_down (EXIT_SUCCESS);
-      }
-      else if (!strcmp (input, "diagram") || !strcmp (input, "d")) {
-	toggle_bool (&show_board);
-      }
-      else if (!strncmp (input, "perft", 5)) {
-	sscanf (input+6, "%d", &depth);
-	raw_nodes = 0;
-	perft (depth);
-	printf ("Raw nodes for depth %d: %ld\n", depth, raw_nodes);
-      }
-      else if (!strcmp (input, "new")) {
-	init_game ();
-	/* refresh our hash tables: */
-	refresh_hash ();
-	force_mode = FALSE;
-	comp_color = 0;
-      }
-      else if (!strcmp (input, "xboard")) {
-	xb_mode = TRUE;
-	toggle_bool (&show_board);
-	signal (SIGINT, SIG_IGN);
-	printf ("\n");
-      }
-      else if (!strcmp (input, "nodes")) {
-	printf ("Number of nodes: %li (%0.2f%% qnodes)\n", nodes,
-		(float) ((float) qnodes / (float) nodes * 100.0));
-      }
-      else if (!strcmp (input, "nps")) {
-	elapsed = (cpu_end-cpu_start)/(double) CLOCKS_PER_SEC;
-	nps = (float) nodes/(float) elapsed;
-	if (!elapsed)
-	  printf ("NPS: N/A\n");
-	else
-	  printf ("NPS: %ld\n", (long int) nps);
-      }
-      else if (!strcmp (input, "post")) {
-	toggle_bool (&post);
-	if (xb_mode)
-	  post = TRUE;
-      }
-      else if (!strcmp (input, "nopost")) {
-	post = FALSE;
-      }
-      else if (!strcmp (input, "random")) {
-	continue;
-      }
-      else if (!strcmp (input, "hard")) {
-	continue;
-      }
-      else if (!strcmp (input, "easy")) {
-	continue;
-      }
-      else if (!strcmp (input, "?")) {
-	continue;
-      }
-      else if (!strcmp (input, "white")) {
-	white_to_move = 1;
-	comp_color = 0;
-      }
-      else if (!strcmp (input, "black")) {
-	white_to_move = 0;
-	comp_color = 1;
-      }
-      else if (!strcmp (input, "force")) {
-	force_mode = TRUE;
-      }
-      else if (!strcmp (input, "go")) {
-	comp_color = white_to_move;
-	force_mode = FALSE;
-      }
-      else if (!strncmp (input, "time", 4)) {
-	sscanf (input+5, "%ld", &time_left);
-      }
-      else if (!strncmp (input, "otim", 4)) {
-	sscanf (input+5, "%ld", &opp_time);
-      }
-      else if (!strncmp (input, "level", 5)) {
-	/* extract the time controls: */
-	sscanf (input+6, "%ld %ld %ld", &moves_to_tc, &min_per_game, &inc);
-	time_left = min_per_game*6000;
-	opp_time = time_left;
-	inc *= 100;
-      }
-      else if (!strncmp (input, "result", 6)) {
-	ics_game_end ();
-	init_game ();
-	force_mode = FALSE;
-	comp_color = 0;
-      }
-      else if (!strcmp (input, "help")) {
-	printf ("\n%s\n\n", divider);
-	printf ("diagram/d: toggle diagram display\n");
-	printf ("exit/quit: terminate Faile\n");
-	printf ("go:        make Faile play the side to move\n");
-	printf ("new:       start a new game\n");
-	printf ("level <x>: the xboard style command to set time\n");
-	printf ("  <x> should be in the form: <a> <b> <c> where:\n");
-	printf ("  a -> moves to TC (0 if using an ICS style TC)\n");
-	printf ("  b -> minutes per game\n");
-	printf ("  c -> increment in seconds\n");
-	printf ("nodes:     outputs the number of nodes searched\n");
-	printf ("nps:       outputs Faile's NPS in search\n");
-	printf ("perft <x>: compute raw nodes to depth x\n");
-	printf ("post:      toggles thinking output\n");
-	printf ("xboard:    put Faile into xboard mode\n");
-	printf ("\n%s\n\n", divider);
-      }
-      else if (!xb_mode) {
-	printf ("Illegal move: %s\n", input);
+            nodes = 0;
+            ply = 0;
+
+            clock0 = clock();
+            time0 = time(0);
+
+            #ifdef lines
+            lines_out = fopen("lines.txt", "a");
+            #endif
+
+            comp_move = think();
+
+            clock_elapsed = (clock()-clock0)/(double)CLOCKS_PER_SEC;
+            search_time = difftime(time(0), time0);
+
+            time_left -= search_time;
+            time_left += increment;
+
+            #ifdef lines
+            fclose(lines_out);
+            #endif
+
+            if (((comp_color == 1 && result != black_won) ||
+                (comp_color == 2 && result != white_won)) &&
+                (result != stalemate)) {
+               play_move(comp_move);
+
+               comp_to_coord (comp_move, coord_move);
+
+               if (comp_color == 1) {
+                  strcpy(history[move_num].white, coord_move);
+               }
+
+               else {
+                  strcpy(history[move_num].black, coord_move);
+               }
+
+               white_to_move += 1;
+               if (comp_color == 2) move_num++;
+
+            }
+
+            printf("\n");
+            print_history(move_num - 1);
+            printf("\n");
+            print_pos();
+            printf("\a"); /* beep after computer moves */
+
+         }
+
+         if (result) {
+            game_end = TRUE;
+         }
+
+         else {
+
+            /* get user input: */
+            parse_user_input();
+
+            if (!result && !game_end) {
+               white_to_move += 1;
+               if (comp_color == 1) move_num++;
+
+               print_history(move_num);
+               printf("\n");
+               print_pos();
+            }
+
+            if (result || new_game) break;
+         }
       }
 
-    }
+      /* check to see if we want a new game: */
+      if (new_game) continue;
+      if (game_end || result) get_user_input(move_num, &input[0]);
 
-  }
+   }
 
-  return 0;
+   return 0;
 
 }
+
+move_s think(void) {
+
+   /* think() is simply a function to do iterative deepening, as well as
+      some time management. */
+
+   double time_used = 0;
+   double elapsed = 0, time_given = 0;
+   time_t start;
+   move_s comp_move, last_move;
+   int i_max, j = 0, i;
+   int boardt[144];
+   char coord_move[6];
+
+   current_score = -100000;
+
+   /* before we do anything, check to see if we can make a move from book! */
+   if (book_ply < 20) {
+      comp_move = choose_book_move();
+      /* if choose_book_move() didn't return a junk move indicating that
+         no book move was found, play the book move! :) */
+      if (comp_move.from != 0) {
+         printf("0 0 0 0 (Book Move)\n");
+         return comp_move;
+      }
+   }
+
+   nodes = 0;
+   qnodes = 0;
+
+   start = time(0);
+
+   time_for_move = allocate_time();
+   time_given = time_for_move;
+
+   /* if we have <= 10 seconds left, and allocate_time() didn't see fit
+      to add any time via increment, we better start moving fast! :) */
+   if (time_left <= 10 && time_for_move == 1.0) i_max = lightning_depth;
+   else i_max = Maxdepth;
+
+   memcpy (boardt, board, sizeof(boardt));
+
+   memset (history_h, 0, sizeof(history_h));
+
+   memcpy (pv, pv_empty, sizeof(pv_empty));
+
+   time_failure = FALSE;
+
+   init_eval();
+
+   for (i = 0; i < 100; i++) {
+      killer1[i] = junk_move;
+      killer2[i] = junk_move;
+      killer_scores[i] = -100000;
+   }
+
+   /* go deeper, iteratively: */
+
+   for (iterative_depth = 1; iterative_depth <= i_max; iterative_depth++) {
+      /* if we've used more than 2/3 of time_given, don't go deeper: */
+      elapsed = difftime(time(0), start);
+      time_used += (elapsed - time_used);
+
+      if (time_used > (2.0/3.0 * time_given)  &&
+          iterative_depth > lightning_depth) break;
+      if (time_used > time_given && iterative_depth > 1) break;
+      time_for_move = time_given - time_used;
+
+      searching_pv = TRUE;
+
+      last_move = search_root (-100000, 100000, iterative_depth);
+
+      /* If the search was stabalized in time, comp_move is set: */
+      if (!time_failure || iterative_depth == 1) {
+         comp_move = last_move;
+         if (iterative_depth >= lightning_depth && post) {
+            /* post search output: */
+            elapsed = difftime(time(0), start);
+            printf("%d ", iterative_depth);
+            printf("%d ", current_score);
+            printf("%0.0f ", elapsed * 100);
+            printf("%li ", nodes);
+            for (j = 1; j < pv_length[1]; j++) {
+               comp_to_coord(pv[1][j], coord_move);
+               printf("%s ", coord_move);
+            }
+            printf("\n");
+         }
+      }
+
+      /* I must account for en_passant pieces which are left over if made
+         on the last node, since make_move was not called, as well as putting
+         back an en_passant piece that may have been present before search,
+         but was removed by a call of make_move: */
+
+      memcpy (board, boardt, sizeof(boardt));
+
+      /* reset the killer scores, so that we can determine if we can get
+         better killers, but leave the killer moves themselves intact to
+         use them for move ordering */
+
+      for (i = 0; i < 100; i++)
+         killer_scores[i] = -100000;
+   }
+
+   qnodes_perc = (double)qnodes / (double)nodes * 100;
+
+   elapsed = difftime(time(0), start);
+   time_cushion += time_for_move - elapsed;
+
+   /* let allocate_time use increment for games with a moves_to_tc, via
+      the time cushion, but this way, we ensure it's added only after
+      we've moved: */
+   if (moves_to_tc > 0 && increment)
+     time_cushion += increment;
+
+   return comp_move;
+
+}
+

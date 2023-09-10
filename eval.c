@@ -1,1107 +1,538 @@
-/*
-MIT License
-
-Copyright (c) 2000 Adrien M. Regimbald
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
-
 /**************************************************
- * Faile version 1.4                              *
- * Author: Adrien Regimbald                       *
- * E-mail: adrien@ee.ualberta.ca                  *
- * Web Page: http://www.ee.ualberta.ca/~adrien/   *
+ *   Faile version 0.6                            *
+ *   Author: Adrien Regimbald                     *
+ *   E-mail: adrien@gpu.srv.ualberta.ca           *
+ *   Web Page: http://www.ualberta.ca/~adrien/    *
  *                                                *
- * File: eval.c                                   *
- * Purpose: functions for evaluating positions    *
+ *   File: Eval.c                                 *
+ *   Purpose: Functions for evaluation, including *
+ *   eval() and in the future, qsearch().         *
  **************************************************/
 
 #include "faile.h"
-#include "extvars.h"
 #include "protos.h"
+#include "extvars.h"
+
+/* Bishop and Knight bonus tables will not change during the game, so they
+   will be defined here: */
+
+int bishop_b[144] = {
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0, -5, -5, -5, -5, -5, -5, -5, -5,  0,  0,
+   0,  0, -5, 10,  0, 10, 10,  0, 10, -5,  0,  0,
+   0,  0, -5,  0,  6, 10, 10,  6,  0, -5,  0,  0,
+   0,  0, -5,  3, 10,  3,  3, 10,  3, -5,  0,  0,
+   0,  0, -5,  3, 10,  3,  3, 10,  3, -5,  0,  0,
+   0,  0, -5,  0,  6, 10, 10,  6,  0, -5,  0,  0,
+   0,  0, -5, 10,  0, 10, 10,  0, 10, -5,  0,  0,
+   0,  0, -5, -5, -5, -5, -5, -5, -5, -5,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0};
+
+int knight_b[144] = {
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,-20,-10,-10,-10,-10,-10,-10,-20,  0,  0,
+   0,  0,-10,  0,  0,  0,  0,  0,  0,-10,  0,  0,
+   0,  0,-10,  0,  5,  5,  5,  5,  0,-10,  0,  0,
+   0,  0,-10,  0,  5, 10, 10,  5,  0,-10,  0,  0,
+   0,  0,-10,  0,  5, 10, 10,  5,  0,-10,  0,  0,
+   0,  0,-10,  0,  5,  5,  5,  5,  0,-10,  0,  0,
+   0,  0,-10,  0,  0,  0,  0,  0,  0,-10,  0,  0,
+   0,  0,-20,-10,-10,-10,-10,-10,-10,-20,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0};
+
+/* the bonus tables for pawns and kings will change as we go to the endgame,
+   so I will only declare them here: */
+
+int wp_b[144], bp_b[144], wk_b[144], bk_b[144];
+Bool king_safety;
 
 
-/* these tables will be used for positional bonuses: */
+void init_eval (void) {
 
-int bishop[144] = {
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,-5,-5,-5,-5,-5,-5,-5,-5,0,0,
-0,0,-5,10,5,10,10,5,10,-5,0,0,
-0,0,-5,5,3,12,12,3,5,-5,0,0,
-0,0,-5,3,12,3,3,12,3,-5,0,0,
-0,0,-5,3,12,3,3,12,3,-5,0,0,
-0,0,-5,5,3,12,12,3,5,-5,0,0,
-0,0,-5,10,5,10,10,5,10,-5,0,0,
-0,0,-5,-5,-5,-5,-5,-5,-5,-5,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0};
+   /* this function basically initializes the bonus tables which will change
+      during the endgame */
 
-int knight[144] = {
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,-10,-5,-5,-5,-5,-5,-5,-10,0,0,
-0,0,-5,0,0,3,3,0,0,-5,0,0,
-0,0,-5,0,5,5,5,5,0,-5,0,0,
-0,0,-5,0,5,10,10,5,0,-5,0,0,
-0,0,-5,0,5,10,10,5,0,-5,0,0,
-0,0,-5,0,5,5,5,5,0,-5,0,0,
-0,0,-5,0,0,3,3,0,0,-5,0,0,
-0,0,-10,-5,-5,-5,-5,-5,-5,-10,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0};
-
-long int white_pawn[144] = {
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,-5,-5,0,0,0,0,0,
-0,0,1,2,3,4,4,3,2,1,0,0,
-0,0,2,4,6,8,8,6,4,2,0,0,
-0,0,3,6,9,12,12,9,6,3,0,0,
-0,0,4,8,12,16,16,12,8,4,0,0,
-0,0,5,10,15,20,20,15,10,5,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0};
-
-int black_pawn[144] = {
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,5,10,15,20,20,15,10,5,0,0,
-0,0,4,8,12,16,16,12,8,4,0,0,
-0,0,3,6,9,12,12,9,6,3,0,0,
-0,0,2,4,6,8,8,6,4,2,0,0,
-0,0,1,2,3,4,4,3,2,1,0,0,
-0,0,0,0,0,-5,-5,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0};
-
-/* to be used during opening and middlegame for white king positioning: */
-int white_king[144] = {
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,2,10,4,0,0,7,10,2,0,0,
-0,0,-3,-3,-5,-5,-5,-5,-3,-3,0,0,
-0,0,-5,-5,-8,-8,-8,-8,-5,-5,0,0,
-0,0,-8,-8,-13,-13,-13,-13,-8,-8,0,0,
-0,0,-13,-13,-21,-21,-21,-21,-13,-13,0,0,
-0,0,-21,-21,-34,-34,-34,-34,-21,-21,0,0,
-0,0,-34,-34,-55,-55,-55,-55,-34,-34,0,0,
-0,0,-55,-55,-89,-89,-89,-89,-55,-55,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0};
-
-/* to be used during opening and middlegame for black king positioning: */
-int black_king[144] = {
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,-55,-55,-89,-89,-89,-89,-55,-55,0,0,
-0,0,-34,-34,-55,-55,-55,-55,-34,-34,0,0,
-0,0,-21,-21,-34,-34,-34,-34,-21,-21,0,0,
-0,0,-13,-13,-21,-21,-21,-21,-13,-13,0,0,
-0,0,-8,-8,-13,-13,-13,-13,-8,-8,0,0,
-0,0,-5,-5,-8,-8,-8,-8,-5,-5,0,0,
-0,0,-3,-3,-5,-5,-5,-5,-3,-3,0,0,
-0,0,2,10,4,0,0,7,10,2,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0};
-
-/* to be used for positioning of both kings during the endgame: */
-int end_king[144] = {
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,-5,-3,-1,0,0,-1,-3,-5,0,0,
-0,0,-3,5,5,5,5,5,5,-3,0,0,
-0,0,-1,5,10,10,10,10,5,-1,0,0,
-0,0,0,5,10,15,15,10,5,0,0,0,
-0,0,0,5,10,15,15,10,5,0,0,0,
-0,0,-1,5,10,10,10,10,5,-1,0,0,
-0,0,-3,5,5,5,5,5,5,-3,0,0,
-0,0,-5,-3,-1,0,0,-1,-3,-5,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0};
-
-/* utility array to reverse rank: */
-int rev_rank[9] = {
-0,8,7,6,5,4,3,2,1};
+   int wp[144] = {
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  1,  2,  3,  4,  4,  3,  2,  1,  0,  0,
+      0,  0,  2,  4,  6,  8,  8,  6,  4,  2,  0,  0,
+      0,  0,  3,  6,  9, 12, 12,  9,  6,  3,  0,  0,
+      0,  0,  4,  8, 12, 16, 16, 12,  8,  4,  0,  0,
+      0,  0,  5, 10, 15, 20, 20, 15, 10,  5,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0};
 
 
-long int end_eval (void) {
+   int bp[144] = {
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  5, 10, 15, 20, 20, 15, 10,  5,  0,  0,
+      0,  0,  4,  8, 12, 16, 16, 12,  8,  4,  0,  0,
+      0,  0,  3,  6,  9, 12, 12,  9,  6,  3,  0,  0,
+      0,  0,  2,  4,  6,  8,  8,  6,  4,  2,  0,  0,
+      0,  0,  1,  2,  3,  4,  4,  3,  2,  1,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0};
 
-  /* return a score for the current endgame position: */
+   int wk[144] = {
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0, -5, 10, 10,  0,  0,  5, 10, -5,  0,  0,
+      0,  0,-10,-10,-10,-10,-10,-10,-10,-10,  0,  0,
+      0,  0,-20,-20,-20,-20,-20,-20,-20,-20,  0,  0,
+      0,  0,-30,-30,-30,-30,-30,-30,-30,-30,  0,  0,
+      0,  0,-40,-40,-40,-40,-40,-40,-40,-40,  0,  0,
+      0,  0,-50,-50,-50,-50,-50,-50,-50,-50,  0,  0,
+      0,  0,-60,-60,-60,-60,-60,-60,-60,-60,  0,  0,
+      0,  0,-70,-70,-70,-70,-70,-70,-70,-70,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0};
 
-  int i, pawn_file, pawns[2][11], white_back_pawn[11], black_back_pawn[11],
-    rank, j;
-  long int score = 0;
-  bool isolated, backwards;
+   int bk[144] = {
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,-70,-70,-70,-70,-70,-70,-70,-70,  0,  0,
+      0,  0,-60,-60,-60,-60,-60,-60,-60,-60,  0,  0,
+      0,  0,-50,-50,-50,-50,-50,-50,-50,-50,  0,  0,
+      0,  0,-40,-40,-40,-40,-40,-40,-40,-40,  0,  0,
+      0,  0,-30,-30,-30,-30,-30,-30,-30,-30,  0,  0,
+      0,  0,-20,-20,-20,-20,-20,-20,-20,-20,  0,  0,
+      0,  0,-10,-10,-10,-10,-10,-10,-10,-10,  0,  0,
+      0,  0, -5, 10, 10,  0,  0,  5, 10, -5,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0};
 
-  /* initialize the pawns array, (files offset by one to use dummy files in
-     order to easier determine isolated status) and also initialize the
-     arrays keeping track of the rank of the most backward pawn: */
-  memset (pawns, 0, sizeof (pawns));
-  for (i = 0; i < 11; i++) {
-    white_back_pawn[i] = 7;
-    black_back_pawn[i] = 2;
-  }
-  for (j = 1; j <= num_pieces; j++) {
-    i = pieces[j];
-    if (!i)
-      continue;
-    pawn_file = file (i)+1;
-    rank = rank (i);
-    if (board[i] == wpawn) {
-      pawns[1][pawn_file]++;
-      if (rank < white_back_pawn[pawn_file]) {
-	white_back_pawn[pawn_file] = rank;
-      }
-    }
-    else if (board[i] == bpawn) {
-      pawns[0][pawn_file]++;
-      if (rank > black_back_pawn[pawn_file]) {
-	black_back_pawn[pawn_file] = rank;
-      }
-    }
-  }
+   int ke[144] = {
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0, -5, -3, -1,  0,  0, -1, -3, -5,  0,  0,
+      0,  0, -3,  5,  5,  5,  5,  5,  5, -3,  0,  0,
+      0,  0, -1,  5, 10, 10, 10, 10,  5, -1,  0,  0,
+      0,  0,  0,  5, 10, 15, 15, 10,  5,  0,  0,  0,
+      0,  0,  0,  5, 10, 15, 15, 10,  5,  0,  0,  0,
+      0,  0, -1,  5, 10, 10, 10, 10,  5, -1,  0,  0,
+      0,  0, -3,  5,  5,  5,  5,  5,  5, -3,  0,  0,
+      0,  0, -5, -3, -1,  0,  0, -1, -3, -5,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0};
 
-  /* loop through the board, adding material value, as well as positional
-     bonuses for all pieces encountered: */
-  for (j = 1; j <= num_pieces; j++) {
-    i = pieces[j];
-    if (!i)
-      continue;
-    pawn_file = file (i)+1;
-    rank = rank (i);
-    switch (board[i]) {
-      case (wpawn):
-	isolated = FALSE;
-	backwards = FALSE;
-	score += 100;
-	score += white_pawn[i];
+   int i, non_pawn, piece;
+   Bool endgame;
 
-	/* in general, bonuses/penalties in the endgame evaluation will be
-	   higher, since pawn structure becomes more important for the
-	   creation of passed pawns */
+   endgame = FALSE;
+   non_pawn = 0;
+   piece = 0;
 
-	/* check for backwards pawns: */
-	if (white_back_pawn[pawn_file+1] > rank
-	    && white_back_pawn[pawn_file-1] > rank) {
-	  score -= 8;
-	  backwards = TRUE;
-	  /* check to see if it is furthermore isolated: */
-	  if (!pawns[1][pawn_file+1] && !pawns[1][pawn_file-1]) {
-	    score -= 5;
-	    isolated = TRUE;
-	  }
-	}
+   for (i = 1; i <= num_pieces; i++) {
+      if (squares[pieces[i]])
+         piece = board[pieces[i]];
+      if (piece != wpawn && piece != bpawn)
+         non_pawn += 1;
+   }
 
-	/* give weak, exposed pawns a penalty (not as much as in the midgame,
-	   since there may be no pieces to take advantage of it): */
-	if (!pawns[0][pawn_file]) {
-	  if (backwards) score -= 3;
-	  if (isolated) score -= 5;
-	}
+   /* if we have no more than 4 pieces (and 2 kings), use endgame bonuses */
+   if (non_pawn <= 6)
+      endgame = TRUE;
 
-	/* give doubled, trippled, etc.. pawns a penalty (bigger in the
-	   endgame, since they will become big targets): */
-	if (pawns[1][pawn_file] > 1)
-	  score -= 3*(pawns[1][pawn_file]-1);
+   /* alert rest of program to end-game status */
+   if (endgame)
+      is_endgame = TRUE;
+   else
+      is_endgame = FALSE;
 
-	/* give bonuses for passed pawns (bigger in the endgame since passed
-	   pawns are what wins the endgame): */
-	if (!pawns[0][pawn_file] && rank >= black_back_pawn[pawn_file-1] &&
-	    rank >= black_back_pawn[pawn_file+1]) {
-	  score += 3*white_pawn[i];
-	  /* give an extra bonus if a connected, passed pawn: */
-	  if (!isolated)
-	    score += 18;
-	}
+   if (!endgame) {
+      memcpy(wp_b, wp, sizeof(wp));
+      memcpy(bp_b, bp, sizeof(bp));
 
-	break;
+      /* encourage the king to not advance: */
+      memcpy(wk_b, wk, sizeof(wk));
+      memcpy(bk_b, bk, sizeof(bk));
 
-      case (bpawn):
-	isolated = FALSE;
-	backwards = FALSE;
-	score -= 100;
-	score -= black_pawn[i];
+      /* pay more attention to king safety: */
+      king_safety = TRUE;
+   }
 
-	/* in general, bonuses/penalties in the endgame evaluation will be
-	   higher, since pawn structure becomes more important for the
-	   creation of passed pawns */
+   else {
+      /* give pawn bonuses more bite, to further encourage passing pawns in
+         the endgame: */
 
-	/* check for backwards pawns: */
-	if (black_back_pawn[pawn_file+1] < rank
-	    && black_back_pawn[pawn_file-1] < rank) {
-	  score += 8;
-	  backwards = TRUE;
-	  /* check to see if it is furthermore isolated: */
-	  if (!pawns[0][pawn_file+1] && !pawns[0][pawn_file-1]) {
-	    score += 5;
-	    isolated = TRUE;
-	  }
-	}
+      for (i = 0; i < 144; i++)
+         wp_b[i] = 2 * wp[i];
+      for (i = 0; i < 144; i++)
+         bp_b[i] = 2 * bp[i];
 
-	/* give weak, exposed pawns a penalty (not as much as in the midgame,
-	   since there may be no pieces to take advantage of it): */
-	if (!pawns[1][pawn_file]) {
-	  if (backwards) score += 3;
-	  if (isolated) score += 5;
-	}
+      /* encourage king centralization: */
+      memcpy(wk_b, ke, sizeof(ke));
+      memcpy(bk_b, ke, sizeof(ke));
 
-	/* give doubled, trippled, etc.. pawns a penalty (bigger in the
-	   endgame, since they will become big targets): */
-	if (pawns[0][pawn_file] > 1)
-	  score += 3*(pawns[0][pawn_file]-1);
-
-	/* give bonuses for passed pawns (bigger in the endgame since passed
-	   pawns are what wins the endgame): */
-	if (!pawns[1][pawn_file] && rank <= white_back_pawn[pawn_file-1] &&
-	    rank <= white_back_pawn[pawn_file+1]) {
-	  score -= 3*black_pawn[i];
-	  /* give an extra bonus if a connected, passed pawn: */
-	  if (!isolated)
-	    score -= 18;
-	}
-
-	break;
-
-      case (wrook):
-	score += 500;
-	
-	/* bonus for being on the 7th (a bit bigger bonus in the endgame, b/c
-	   a rook on the 7th can be a killer in the endgame): */
-	if (rank == 7)
-	  score += 12;
-
-	/* give bonuses depending on how open the rook's file is: */
-	if (!pawns[1][pawn_file]) {
-	  /* half open file */
-	  score += 5;
-	  if (!pawns[0][pawn_file]) {
-	    /* open file */
-	    score += 3;
-	  }
-	}
-
-	break;
-
-      case (brook):
-	score -= 500;
-
-	/* bonus for being on the 7th (a bit bigger bonus in the endgame, b/c
-	   a rook on the 7th can be a killer in the endgame): */
-	if (rank == 2)
-	  score -= 12;
-
-	/* give bonuses depending on how open the rook's file is: */
-	if (!pawns[0][pawn_file]) {
-	  /* half open file */
-	  score -= 5;
-	  if (!pawns[1][pawn_file]) {
-	    /* open file */
-	    score -= 3;
-	  }
-	}
-
-	break;
-
-      case (wbishop):
-	score += 325;
-	score += bishop[i];
-	break;
-
-      case (bbishop):
-	score -= 325;
-	score -= bishop[i];
-	break;
-
-      case (wknight):
-	score += 310;
-	score += knight[i];
-	break;
-
-      case (bknight):
-	score -= 310;
-	score -= knight[i];
-	break;
-
-      case (wqueen):
-	score += 900;
-	break;
-
-      case (bqueen):
-	score -= 900;
-	break;
-
-      case (wking):
-	/* the king is safe to come out in the endgame, so we don't check for
-	   king safety anymore, and encourage centralization of the king */
-	score += end_king[i];
-	break;
-
-      case (bking):
-	/* the king is safe to come out in the endgame, so we don't check for
-	   king safety anymore, and encourage centralization of the king */
-	score -= end_king[i];
-	break;
-    }
-  }
-
-  /* the e/d pawn blockage is not relevant in the endgame, and we don't need
-     to check for king safety due to pawn storms / heavy piece infiltration */
-
-  /* encourage trading off material when one side has a material advantage
-     (note that we don't need to worry about whether material score dropped or
-     not, because search will naturally choose a variation where it keeps its
-     material score over one with a small positional bonus): */
-  if (score > 90 && start_piece_count < piece_count) {
-    score += 10;
-  }
-  else if (score < 90 && start_piece_count < piece_count) {
-    score -= 10;
-  }
-
-  /* adjust for color: */
-  if (white_to_move == 1) {
-    return score;
-  }
-  else {
-    return -score;
-  }
+      /* pay less attention to king safety: */
+      king_safety = FALSE;
+   }
 
 }
 
 
+int eval(void) {
 
-//global variables dependencies
-//num_pieces in main.c
-//board in main.c current representation of the board
-//score in main.c contains score of a given board
-//moves in main.c some array
-long int mid_eval (void) {
+   /* find a score at the current position for the side to move:
+    (initially assume that side to move is white, if false, we will
+    change it later with the if statement on the return) */
 
-  /* return a score for the current middlegame position: */
+   int a, score, square, pawn_file, wking_file, bking_file;
+   int pawns[2][10];
+   Bool isolated;
 
-  int i, pawn_file, pawns[2][11], white_back_pawn[11], black_back_pawn[11],
-    rank, wking_pawn_file, bking_pawn_file, j;
-  long int score = 0;
-  bool isolated, backwards;
+   score = 0;
 
-  /* initialize the pawns array, (files offset by one to use dummy files in
-     order to easier determine isolated status) and also initialize the
-     arrays keeping track of the rank of the most backward pawn: */
-  memset (pawns, 0, sizeof (pawns));
-  for (i = 0; i < 11; i++) {
-    white_back_pawn[i] = 7;
-    black_back_pawn[i] = 2;
-  }
-  for (j = 1; j <= num_pieces; j++) {
-    i = pieces[j];
-    //if pieces are dead don't do anything
-    if (!i)
-      continue;
-    //get both the file and rank of the piece
-    pawn_file = file (i)+1;
-    rank = rank (i);
-    //pawn is a constant in header file
-    //if the piece under consideration is a white pawn
-    if (board[i] == wpawn) {
-      //this stores how many paws there are on a given file
-      pawns[1][pawn_file]++;
-      //stores the minimum rank of a pawn on a given file
-      if (rank < white_back_pawn[pawn_file]) {
-	white_back_pawn[pawn_file] = rank;
+   memset (pawns, 0, sizeof(pawns));
+
+   #ifdef lines
+
+   for (a = 1; a < line_depth; a++) {
+      if (a != line_depth - 1)
+         fprintf(lines_out, "%c%d%c%d ", file(line[a][0])+96,
+            rank(line[a][0]), file(line[a][1])+96, rank(line[a][1]));
+      else
+         fprintf(lines_out, "%c%d%c%d\n", file(line[a][0])+96,
+            rank(line[a][0]), file(line[a][1])+96, rank(line[a][1]));
+   }
+   #endif
+
+   /* loop through the board, setting up our pawns array: (note, the files
+      are offset by one, to allow an easy check with imaginary files to left
+      of a-file, and right of h-file, rather than using if's in the pawn
+      evaluation!)*/
+
+   for (a = 1; a <= num_pieces; a++) {
+      square = pieces[a];
+      if (board[square] == wpawn)
+         pawns[1][file(square) + 1] += 1;
+      else if (board[square] == bpawn)
+         pawns[0][file(square) + 1] += 1;
+   }
+
+   /* now, loop through the board, and add up all piece values & bonuses: */
+
+   for (a = 1; a <= num_pieces; a++) {
+      square = pieces[a];
+      pawn_file = file(square) + 1;
+      switch (board[square]) {
+         case (wpawn):
+            isolated = FALSE;
+            score += 100;
+            score += wp_b[square];
+
+            /* check for isolated pawns: */
+            if (!pawns[1][pawn_file + 1] && !pawns[1][pawn_file - 1]) {
+               score -= 10;
+               isolated = TRUE;
+               /* check to see if it's exposed as well: */
+               if (!pawns[0][pawn_file])
+                  score -= 20;
+            }
+
+            /* check to see if the pawn is doubled, or tripled, or...: */
+            if (pawns[1][pawn_file] > 1)
+               score -= 3 * (pawns[1][pawn_file] - 1);
+
+            /* check to see if the pawn is passed: */
+            if (!pawns[0][pawn_file] && !pawns[0][pawn_file + 1] &&
+               !pawns[0][pawn_file - 1]) {
+               score += 15;
+               score += 3 * wp_b[square];
+               /* check to see if the pawn is connected as well: */
+               if (!isolated)
+                  score += 30;
+            }
+
+            break;
+
+         case (bpawn):
+            isolated = FALSE;
+            score -= 100;
+            score -= bp_b[square];
+
+            /* check for isolated pawns: */
+            if (!pawns[0][pawn_file + 1] && !pawns[0][pawn_file - 1]) {
+               score += 10;
+               isolated = TRUE;
+               /* check to see if it's exposed as well: */
+               if (!pawns[1][pawn_file])
+                  score += 20;
+            }
+
+            /* check to see if the pawn is doubled, or tripled, or...: */
+            if (pawns[0][pawn_file] > 1)
+               score += 3 * (pawns[0][pawn_file] - 1);
+
+            /* check to see if the pawn is passed: */
+            if (!pawns[1][pawn_file] && !pawns[1][pawn_file + 1] &&
+               !pawns[1][pawn_file - 1]) {
+               score -= 15;
+               score -= 3 * bp_b[square];
+               /* check to see if the pawn is connected as well: */
+               if (!isolated)
+                  score -= 30;
+            }
+
+            break;
+
+         case (wrook):
+            score += 500;
+
+            /* give a bonus for being on 7th rank: */
+            if (rank(square) == 7)
+               score += 10;
+
+            /* check to see how open the rook's file is: */
+            if (!pawns[1][pawn_file]) {
+               score += 8;
+               /* we now know it's at least half open, see if maybe it's
+                  completely open: */
+               if (!pawns[0][pawn_file])
+                  score += 3;
+            }
+
+            break;
+
+         case (brook):
+            score -= 500;
+
+            /* give a bonus for being on the 2nd rank: */
+            if (rank(square) == 2)
+               score -= 10;
+
+            /* check to see how open the rook's file is: */
+            if (!pawns[0][pawn_file]) {
+               score -= 8;
+               /* we now know it's at least half open, see if maybe it's
+                  completely open: */
+               if (!pawns[1][pawn_file])
+                  score -= 3;
+            }
+
+            break;
+
+         /* minor pieces simply require a piece value, plus a simple bonus */
+
+         case (wbishop):
+            score += 325;
+            score += bishop_b[square];
+            break;
+
+         case (bbishop):
+            score -= 325;
+            score -= bishop_b[square];
+            break;
+
+         case (wknight):
+            score += 310;
+            score += knight_b[square];
+            break;
+
+         case (bknight):
+            score -= 310;
+            score -= knight_b[square];
+            break;
+
+         case (wqueen):
+            score += 900;
+
+            /* penalty for the queen moving before the other minors: */
+            if (square != 29)
+               if (!moved[28] || !moved[27] || !moved[31] || !moved[32])
+                  score -= 7;
+            break;
+
+         case (bqueen):
+            score -= 900;
+
+            /* penalty for the queen moving before the other minors: */
+            if (square != 113)
+               if (!moved[112] || !moved[111] || !moved[115] || !moved[116])
+                  score += 7;
+            break;
+
+         case (wking):
+            score += wk_b[square];
+            if (king_safety) {
+
+               /* encourage castling: */
+               if (white_castled) {
+                  score += 30;
+
+                  /* encourage keeping a good pawn cover before endgame: */
+                  if (moved[square + 11]) {
+                     score -= 3;
+                     if (board[square + 23] != wpawn)
+                        score -= 6;
+                  }
+                  if (moved[square + 12]) {
+                     score -= 4;
+                     if (board[square + 24] != wpawn)
+                        score -= 8;
+                  }
+                  if (moved[square + 13]) {
+                     score -= 3;
+                     if (board[square + 25] != wpawn)
+                        score -= 6;
+                  }
+               }
+
+               /* as a general rule, check for pawn cover near king: */
+               if (!pawns[1][pawn_file + 1])
+                  score -= 7;
+               if (!pawns[1][pawn_file])
+                  score -= 7;
+               if (!pawns[1][pawn_file - 1])
+                  score -= 7;
+            }
+            break;
+
+         case (bking):
+            score -= bk_b[square];
+            if (king_safety) {
+
+               /* encourage castling: */
+               if (black_castled) {
+                  score -= 30;
+
+                  /* encourage keeping a good pawn cover before endgame: */
+                  if (moved[square - 11]) {
+                     score += 3;
+                     if (board[square - 23] != bpawn)
+                        score += 6;
+                  }
+                  if (moved[square - 12]) {
+                     score += 4;
+                     if (board[square - 24] != bpawn)
+                        score += 8;
+                  }
+                  if (moved[square - 13]) {
+                     score += 3;
+                     if (board[square - 25] != bpawn)
+                        score += 6;
+                  }
+               }
+
+               /* as a general rule, check for pawn cover near king: */
+               if (!pawns[0][pawn_file + 1])
+                  score += 7;
+               if (!pawns[0][pawn_file])
+                  score += 7;
+               if (!pawns[0][pawn_file - 1])
+                  score += 7;
+            }
+            break;
       }
-    }
-    //same is done but for black pieces
-    else if (board[i] == bpawn) {
-      pawns[0][pawn_file]++;
-      if (rank > black_back_pawn[pawn_file]) {
-	black_back_pawn[pawn_file] = rank;
+   }
+
+   /* if there is > 2 files between the white and black king, we need to
+      pay attention to pawn storms and open files: */
+
+   if (king_safety) {
+      wking_file = file (wking_loc);
+      bking_file = file (bking_loc);
+      if (((wking_file - bking_file) > 2) ||
+          ((wking_file - bking_file) < 2)) {
+         /* discourage black pawn storms! */
+         if (rank (wking_loc) == 1) {
+            if (moved[wking_loc + 71]) {
+               if (board[wking_loc + 35] == bpawn)
+                  score -= 8;
+               if (board[wking_loc + 23] == bpawn)
+                  score -= 11;
+            }
+            if (moved[wking_loc + 72]) {
+               if (board[wking_loc + 36] == bpawn)
+                  score -= 8;
+               if (board[wking_loc + 24] == bpawn)
+                  score -= 11;
+            }
+            if (moved[wking_loc + 73]) {
+               if (board[wking_loc + 37] == bpawn)
+                  score -= 8;
+               if (board[wking_loc + 25] == bpawn)
+                  score -= 11;
+            }
+         }
+         /* otherwise, you're on opposite sides, and your king isn't on the
+            first rank!! not good! :) */
+         else
+            score -= 8;
+
+         /* discourage white pawn storms (for black)! */
+         if (rank (bking_loc) == 8) {
+            if (moved[bking_loc - 71]) {
+               if (board[bking_loc - 35] == wpawn)
+                  score += 8;
+               if (board[bking_loc - 23] == wpawn)
+                  score += 11;
+            }
+            if (moved[bking_loc - 72]) {
+               if (board[bking_loc - 36] == wpawn)
+                  score += 8;
+               if (board[bking_loc - 24] == wpawn)
+                  score += 11;
+            }
+            if (moved[bking_loc - 73]) {
+               if (board[bking_loc - 37] == wpawn)
+                  score += 8;
+               if (board[bking_loc - 25] == wpawn)
+                  score += 11;
+            }
+         }
+         /* otherwise, you're on opposite sides, and your king isn't on the
+            eighth rank!! not good! :) */
+         else
+            score += 8;
+
+         /* if the kings are on opposite wings, they are free to open up
+            lines on the opposite wing, so we must give penalties to a
+            player who's king is on one of these lines: */
+
+         /* from white's point of view: */
+         if (!pawns[0][wking_file + 2])
+            score -= 4;
+         if (!pawns[0][wking_file + 1])
+            score -= 5;
+         if (!pawns[0][wking_file])
+            score -= 4;
+
+         /* from black's point of view: */
+         if (!pawns[1][bking_file + 2])
+            score += 4;
+         if (!pawns[1][bking_file + 1])
+            score += 5;
+         if (!pawns[1][bking_file])
+            score += 4;
       }
-    }
-  }
+   }
 
-  /* loop through the board, adding material value, as well as positional
-     bonuses for all pieces encountered: */
-  for (j = 1; j <= num_pieces; j++) {
-    i = pieces[j];
-    if (!i)
-      continue;
-    pawn_file = file (i)+1;
-    rank = rank (i);
-    //give score for a given every different kind of piece
-    switch (board[i]) {
-      case (wpawn):
-	isolated = FALSE;
-	backwards = FALSE;
-	score += 100;
-	score += white_pawn[i];
+   /* make sure that the e & d pawns aren't blocked before they
+      can move! */
 
-	/* check for backwards pawns: */
-	if (white_back_pawn[pawn_file+1] > rank
-	    && white_back_pawn[pawn_file-1] > rank) {
-	  score -= 5;
-	  backwards = TRUE;
-	  /* check to see if it is furthermore isolated: */
-	  if (!pawns[1][pawn_file+1] && !pawns[1][pawn_file-1]) {
-	    score -= 3;
-	    isolated = TRUE;
-	  }
-	}
-
-	/* give weak, exposed pawns a penalty: */
-	if (!pawns[0][pawn_file]) {
-	  if (backwards) score -= 4;
-	  if (isolated) score -= 8;
-	}
-
-	/* give doubled, trippled, etc.. pawns a penalty: */
-	if (pawns[1][pawn_file] > 1)
-	  score -= 2*(pawns[1][pawn_file]-1);
-
-	/* give bonuses for passed pawns: */
-	if (!pawns[0][pawn_file] && rank >= black_back_pawn[pawn_file-1] &&
-	    rank >= black_back_pawn[pawn_file+1]) {
-	  score += 2*white_pawn[i];
-	  /* give an extra bonus if a connected, passed pawn: */
-	  if (!isolated)
-	    score += 15;
-	}
-
-	break;
-
-      case (bpawn):
-	isolated = FALSE;
-	backwards = FALSE;
-	score -= 100;
-	score -= black_pawn[i];
-
-	/* check for backwards pawns: */
-	if (black_back_pawn[pawn_file+1] < rank
-	    && black_back_pawn[pawn_file-1] < rank) {
-	  score += 5;
-	  backwards = TRUE;
-	  /* check to see if it is furthermore isolated: */
-	  if (!pawns[0][pawn_file+1] && !pawns[0][pawn_file-1]) {
-	    score += 3;
-	    isolated = TRUE;
-	  }
-	}
-
-	/* give weak, exposed pawns a penalty: */
-	if (!pawns[1][pawn_file]) {
-	  if (backwards) score += 4;
-	  if (isolated) score += 8;
-	}
-
-	/* give doubled, trippled, etc.. pawns a penalty: */
-	if (pawns[0][pawn_file] > 1)
-	  score += 2*(pawns[0][pawn_file]-1);
-
-	/* give bonuses for passed pawns: */
-	if (!pawns[1][pawn_file] && rank <= white_back_pawn[pawn_file-1] &&
-	    rank <= white_back_pawn[pawn_file+1]) {
-	  score -= 2*black_pawn[i];
-	  /* give an extra bonus if a connected, passed pawn: */
-	  if (!isolated)
-	    score -= 15;
-	}
-
-	break;
-
-      case (wrook):
-	score += 500;
-	
-	/* bonus for being on the 7th: */
-	if (rank == 7)
-	  score += 8;
-
-	/* give bonuses depending on how open the rook's file is: */
-	if (!pawns[1][pawn_file]) {
-	  /* half open file */
-	  score += 5;
-	  if (!pawns[0][pawn_file]) {
-	    /* open file */
-	    score += 3;
-	  }
-	}
-
-	break;
-
-      case (brook):
-	score -= 500;
-
-	/* bonus for being on the 7th: */
-	if (rank == 2)
-	  score -= 8;
-
-	/* give bonuses depending on how open the rook's file is: */
-	if (!pawns[0][pawn_file]) {
-	  /* half open file */
-	  score -= 5;
-	  if (!pawns[1][pawn_file]) {
-	    /* open file */
-	    score -= 3;
-	  }
-	}
-
-	break;
-
-      case (wbishop):
-	score += 325;
-	score += bishop[i];
-	break;
-
-      case (bbishop):
-	score -= 325;
-	score -= bishop[i];
-	break;
-
-      case (wknight):
-	score += 310;
-	score += knight[i];
-	break;
-
-      case (bknight):
-	score -= 310;
-	score -= knight[i];
-	break;
-
-      case (wqueen):
-	score += 900;
-	break;
-
-      case (bqueen):
-	score -= 900;
-	break;
-
-      case (wking):
-	score += white_king[i];
-
-	/* encourage castling, and give a penalty for moving the king without
-	   castling */
-	if (white_castled)
-	  score += 20;
-	else if (moved[30]) {
-	  score -= 7;
-	  /* make the penalty bigger if the king is open, leaving the other
-	     side a chance to gain tempo with files along the file, as well
-	     as building an attack: */
-	  if (!pawns[1][pawn_file])
-	    score -= 8;
-	}
-
-	/* if the king is behind some pawn cover, give penalties for the pawn
-	   cover being far from the king, else give a penalty for the king
-	   not having any pawn cover: */
-	if (rank < white_back_pawn[pawn_file] && pawns[1][pawn_file])
-	  score -= 8*(white_back_pawn[pawn_file]-rank-1);
-	else
-	  score -= 12;
-	if (rank < white_back_pawn[pawn_file+1] && pawns[1][pawn_file+1])
-	  score -= 7*(white_back_pawn[pawn_file+1]-rank-1);
-	else
-	  score -= 12;
-	if (rank < white_back_pawn[pawn_file-1] && pawns[1][pawn_file-1])
-	  score -= 7*(white_back_pawn[pawn_file-1]-rank-1);
-	else
-	  score -= 12;	  
-
-	break;
-
-      case (bking):
-	score -= black_king[i];
-
-	/* encourage castling, and give a penalty for moving the king without
-	   castling */
-	if (black_castled)
-	  score -= 20;
-	else if (moved[114]) {
-	  score += 7;
-	  /* make the penalty bigger if the king is open, leaving the other
-	     side a chance to gain tempo with files along the file, as well
-	     as building an attack: */
-	  if (!pawns[0][pawn_file])
-	    score += 8;
-	}
-
-	/* if the king is behind some pawn cover, give penalties for the pawn
-	   cover being far from the king, else give a penalty for the king
-	   not having any pawn cover: */
-	if (rank > black_back_pawn[pawn_file] && pawns[0][pawn_file])
-	  score += 8*(rank-black_back_pawn[pawn_file]-1);
-	else
-	  score += 12;
-	if (rank > black_back_pawn[pawn_file+1] && pawns[0][pawn_file+1])
-	  score += 7*(rank-black_back_pawn[pawn_file+1]-1);
-	else
-	  score += 12;
-	if (rank > black_back_pawn[pawn_file-1] && pawns[0][pawn_file-1])
-	  score += 7*(rank-black_back_pawn[pawn_file-1]-1);
-	else
-	  score += 12;
-
-	break;
-    }
-  }
-
-  //npieces is a header file definition
-  /* give penalties for blocking the e/d pawns: */
-  if (!moved[41] && board[53] != npiece)
-    score -= 5;
-  if (!moved[42] && board[54] != npiece)
-    score -= 5;
-  if (!moved[101] && board[89] != npiece)
-    score += 5;
-  if (!moved[102] && board[90] != npiece)
-    score += 5;
-
-  /* to be used for pawn storm code: */
-  wking_pawn_file = file (wking_loc)+1;
-  bking_pawn_file = file (bking_loc)+1;
-
-  /* if the kings are on opposite wings, or far apart, check for pawn
-     storms, and open lines for heavy pieces: */
-  if ((wking_pawn_file-bking_pawn_file) > 2 ||
-      (bking_pawn_file-wking_pawn_file) > 2) {
-    /* black pawn storms: */
-    score -= 3*(rev_rank[black_back_pawn[wking_pawn_file]]-2);
-    score -= 3*(rev_rank[black_back_pawn[wking_pawn_file+1]]-2);
-    score -= 3*(rev_rank[black_back_pawn[wking_pawn_file-1]]-2);
-
-    /* white pawn storms: */
-    score += 3*(white_back_pawn[bking_pawn_file]-2);
-    score += 3*(white_back_pawn[bking_pawn_file+1]-2);
-    score += 3*(white_back_pawn[bking_pawn_file-1]-2);
-
-    /* black opening up lines: */
-    if (!pawns[0][wking_pawn_file])
+   if (!moved[41] && moved[53])
       score -= 8;
-    if (!pawns[0][wking_pawn_file+1])
-      score -= 6;
-    if (!pawns[0][wking_pawn_file-1])
-      score -= 6;
-
-    /* white opening up lines: */
-    if (!pawns[1][bking_pawn_file])
+   if (!moved[42] && moved[54])
+      score -= 8;
+   if (!moved[101] && moved[89])
       score += 8;
-    if (!pawns[1][bking_pawn_file+1])
-      score += 6;
-    if (!pawns[1][bking_pawn_file-1])
-      score += 6;
+   if (!moved[102] && moved[90])
+      score += 8;
 
-  }
-
-  /* encourage trading off material when one side has a material advantage
-     (note that we don't need to worry about whether material score dropped or
-     not, because search will naturally choose a variation where it keeps its
-     material score over one with a small positional bonus): */
-  if (score > 90 && start_piece_count < piece_count) {
-    score += 10;
-  }
-  else if (score < 90 && start_piece_count < piece_count) {
-    score -= 10;
-  }
-
-  /* adjust for color: */
-  if (white_to_move == 1) {
-    return score;
-  }
-  else {
-    return -score;
-  }
-
-}
-
-long int opn_eval (void) {
-
-  /* return a score for the current opening position: */
-
-  int i, pawn_file, pawns[2][11], white_back_pawn[11], black_back_pawn[11],
-    rank, wking_pawn_file, bking_pawn_file, j;
-  long int score = 0;
-  bool isolated, backwards;
-
-  /* initialize the pawns array, (files offset by one to use dummy files in
-     order to easier determine isolated status) and also initialize the
-     arrays keeping track of the rank of the most backward pawn: */
-  memset (pawns, 0, sizeof (pawns));
-  for (i = 0; i < 11; i++) {
-    white_back_pawn[i] = 7;
-    black_back_pawn[i] = 2;
-  }
-  for (j = 1; j <= num_pieces; j++) {
-    i = pieces[j];
-    if (!i)
-      continue;
-    pawn_file = file (i)+1;
-    rank = rank (i);
-    if (board[i] == wpawn) {
-      pawns[1][pawn_file]++;
-      if (rank < white_back_pawn[pawn_file]) {
-	white_back_pawn[pawn_file] = rank;
-      }
-    }
-    else if (board[i] == bpawn) {
-      pawns[0][pawn_file]++;
-      if (rank > black_back_pawn[pawn_file]) {
-	black_back_pawn[pawn_file] = rank;
-      }
-    }
-  }
-
-  /* loop through the board, adding material value, as well as positional
-     bonuses for all pieces encountered: */
-  for (j = 1; j <= num_pieces; j++) {
-    i = pieces[j];
-    if (!i)
-      continue;
-    pawn_file = file (i)+1;
-    rank = rank (i);
-    switch (board[i]) {
-      case (wpawn):
-	isolated = FALSE;
-	backwards = FALSE;
-	score += 100;
-	score += white_pawn[i];
-
-	/* penalties / bonuses will be in general smaller in the opening,
-	   in order to put an emphasis on piece development */
-
-	/* check for backwards pawns: */
-	if (white_back_pawn[pawn_file+1] > rank
-	    && white_back_pawn[pawn_file-1] > rank) {
-	  /* no penalty in the opening for having a backwards pawn that hasn't
-	     moved yet! */
-	  if (rank != 2)
-	    score -= 3;
-	  backwards = TRUE;
-	  /* check to see if it is furthermore isolated: */
-	  if (!pawns[1][pawn_file+1] && !pawns[1][pawn_file-1]) {
-	    score -= 2;
-	    isolated = TRUE;
-	  }
-	}
-
-	/* give weak, exposed pawns a penalty: */
-	if (!pawns[0][pawn_file]) {
-	  if (backwards) score -= 3;
-	  if (isolated) score -= 5;
-	}
-
-	/* give doubled, trippled, etc.. pawns a penalty: */
-	if (pawns[1][pawn_file] > 1)
-	  score -= 2*(pawns[1][pawn_file]-1);
-
-	/* give bonuses for passed pawns: */
-	if (!pawns[0][pawn_file] && rank >= black_back_pawn[pawn_file-1] &&
-	    rank >= black_back_pawn[pawn_file+1]) {
-	  score += white_pawn[i];
-	  /* give an extra bonus if a connected, passed pawn: */
-	  if (!isolated)
-	    score += 10;
-	}
-
-	break;
-
-      case (bpawn):
-	isolated = FALSE;
-	backwards = FALSE;
-	score -= 100;
-	score -= black_pawn[i];
-
-	/* penalties / bonuses will be in general smaller in the opening,
-	   in order to put an emphasis on piece development */
-
-	/* check for backwards pawns: */
-	if (black_back_pawn[pawn_file+1] < rank
-	    && black_back_pawn[pawn_file-1] < rank) {
-	  /* no penalty in the opening for having a backwards pawn that hasn't
-	     moved yet! */
-	  if (rank != 2)
-	    score += 3;
-	  backwards = TRUE;
-	  /* check to see if it is furthermore isolated: */
-	  if (!pawns[0][pawn_file+1] && !pawns[0][pawn_file-1]) {
-	    score += 2;
-	    isolated = TRUE;
-	  }
-	}
-
-	/* give weak, exposed pawns a penalty: */
-	if (!pawns[1][pawn_file]) {
-	  if (backwards) score += 3;
-	  if (isolated) score += 5;
-	}
-
-	/* give doubled, trippled, etc.. pawns a penalty: */
-	if (pawns[0][pawn_file] > 1)
-	  score += 2*(pawns[0][pawn_file]-1);
-
-	/* give bonuses for passed pawns: */
-	if (!pawns[1][pawn_file] && rank <= white_back_pawn[pawn_file-1] &&
-	    rank <= white_back_pawn[pawn_file+1]) {
-	  score -= black_pawn[i];
-	  /* give an extra bonus if a connected, passed pawn: */
-	  if (!isolated)
-	    score -= 10;
-	}
-
-	break;
-
-      case (wrook):
-	score += 500;
-	
-	/* bonus for being on the 7th: */
-	if (rank == 7)
-	  score += 8;
-
-	/* give bonuses depending on how open the rook's file is: */
-	if (!pawns[1][pawn_file]) {
-	  /* half open file */
-	  score += 5;
-	  if (!pawns[0][pawn_file]) {
-	    /* open file */
-	    score += 3;
-	  }
-	}
-
-	break;
-
-      case (brook):
-	score -= 500;
-
-	/* bonus for being on the 7th: */
-	if (rank == 2)
-	  score -= 8;
-
-	/* give bonuses depending on how open the rook's file is: */
-	if (!pawns[0][pawn_file]) {
-	  /* half open file */
-	  score -= 5;
-	  if (!pawns[1][pawn_file]) {
-	    /* open file */
-	    score -= 3;
-	  }
-	}
-
-	break;
-
-      case (wbishop):
-	score += 325;
-	score += bishop[i];
-	break;
-
-      case (bbishop):
-	score -= 325;
-	score -= bishop[i];
-	break;
-
-      case (wknight):
-	score += 310;
-	score += knight[i];
-	break;
-
-      case (bknight):
-	score -= 310;
-	score -= knight[i];
-	break;
-
-      case (wqueen):
-	score += 900;
-
-	/* a small penalty to discourage moving the queen in the opening
-	   before the other minors: */
-	if (i != 29)
-	  if (!moved[28] || !moved[27] || !moved[31] || !moved[32])
-	    score -= 4;
-
-	break;
-
-      case (bqueen):
-	score -= 900;
-
-	/* a small penalty to discourage moving the queen in the opening
-	   before the other minors: */
-	if (i != 113)
-	  if (!moved[112] || !moved[111] || !moved[115] || !moved[116])
-	    score += 4;
-
-	break;
-
-      case (wking):
-	score += white_king[i];
-
-	/* encourage castling, and give a penalty for moving the king without
-	   castling */
-	if (white_castled)
-	  score += 12;
-	else if (moved[30]) {
-	  score -= 4;
-	  /* make the penalty bigger if the king is open, leaving the other
-	     side a chance to gain tempo with files along the file, as well
-	     as building an attack: */
-	  if (!pawns[1][pawn_file])
-	    score -= 6;
-	}
-
-	/* in general, in the opening, don't worry quite so much about pawn
-	   cover, because sometimes it isn't good for the king to castle */
-
-	/* if the king is behind some pawn cover, give penalties for the pawn
-	   cover being far from the king, else give a penalty for the king
-	   not having any pawn cover: */
-	if (rank < white_back_pawn[pawn_file] && pawns[1][pawn_file])
-	  score -= 5*(white_back_pawn[pawn_file]-rank-1);
-	else
-	  score -= 8;
-	if (rank < white_back_pawn[pawn_file+1] && pawns[1][pawn_file+1])
-	  score -= 4*(white_back_pawn[pawn_file+1]-rank-1);
-	else
-	  score -= 8;
-	if (rank < white_back_pawn[pawn_file-1] && pawns[1][pawn_file-1])
-	  score -= 4*(white_back_pawn[pawn_file-1]-rank-1);
-	else
-	  score -= 8;
-
-	break;
-
-      case (bking):
-	score -= black_king[i];
-
-	/* encourage castling, and give a penalty for moving the king without
-	   castling */
-	if (black_castled)
-	  score -= 12;
-	else if (moved[114]) {
-	  score += 4;
-	  /* make the penalty bigger if the king is open, leaving the other
-	     side a chance to gain tempo with files along the file, as well
-	     as building an attack: */
-	  if (!pawns[0][pawn_file])
-	    score += 6;
-	}
-
-	/* in general, in the opening, don't worry quite so much about pawn
-	   cover, because sometimes it isn't good for the king to castle */
-
-	/* if the king is behind some pawn cover, give penalties for the pawn
-	   cover being far from the king, else give a penalty for the king
-	   not having any pawn cover: */
-	if (rank > black_back_pawn[pawn_file] && pawns[0][pawn_file])
-	  score += 5*(rank-black_back_pawn[pawn_file]-1);
-	else
-	  score += 8;
-	if (rank > black_back_pawn[pawn_file+1] && pawns[0][pawn_file+1])
-	  score += 4*(rank-black_back_pawn[pawn_file+1]-1);
-	else
-	  score += 8;
-	if (rank > black_back_pawn[pawn_file-1] && pawns[0][pawn_file-1])
-	  score += 4*(rank-black_back_pawn[pawn_file-1]-1);
-	else
-	  score += 8;
-
-	break;
-    }
-  }
-
-  /* give bigger penalties for blocking the e/d pawns in the opening, as
-     we want to develop quickly: */
-  if (!moved[41] && board[53] != npiece)
-    score -= 7;
-  if (!moved[42] && board[54] != npiece)
-    score -= 7;
-  if (!moved[101] && board[89] != npiece)
-    score += 7;
-  if (!moved[102] && board[90] != npiece)
-    score += 7;
-
-  /* to be used for pawn storm code: */
-  wking_pawn_file = file (wking_loc)+1;
-  bking_pawn_file = file (bking_loc)+1;
-
-  /* if the kings are on opposite wings, or far apart, check for pawn
-     storms, and open lines for heavy pieces (bonuses/penalties brought
-     down a bit in the opening, as it isn't a good idea to start pawn
-     storming when the position is still fluid): */
-  if ((wking_pawn_file-bking_pawn_file) > 2 ||
-      (bking_pawn_file-wking_pawn_file) > 2) {
-    /* black pawn storms: */
-    score -= rev_rank[black_back_pawn[wking_pawn_file]]-2;
-    score -= rev_rank[black_back_pawn[wking_pawn_file+1]]-2;
-    score -= rev_rank[black_back_pawn[wking_pawn_file-1]]-2;
-
-    /* white pawn storms: */
-    score += white_back_pawn[bking_pawn_file]-2;
-    score += white_back_pawn[bking_pawn_file+1]-2;
-    score += white_back_pawn[bking_pawn_file-1]-2;
-
-    /* black opening up lines: */
-    if (!pawns[0][wking_pawn_file])
-      score -= 6;
-    if (!pawns[0][wking_pawn_file+1])
-      score -= 4;
-    if (!pawns[0][wking_pawn_file-1])
-      score -= 4;
-
-    /* white opening up lines: */
-    if (!pawns[1][bking_pawn_file])
-      score += 6;
-    if (!pawns[1][bking_pawn_file+1])
-      score += 4;
-    if (!pawns[1][bking_pawn_file-1])
-      score += 4;
-
-  }
-
-  /* don't adjust for trading pieces when ahead quite yet .. leave that until
-     the middlegame and endgame */
-
-  /* adjust for color: */
-  if (white_to_move == 1) {
-    return score;
-  }
-  else {
-    return -score;
-  }
-
-}
-
-
-
-long int eval (state* s) {
-
-	uint8_t piece_count = s->piece_count;
-  /* select the appropriate eval() routine: */
-  //depeding on the number of pieces remaining on the board
-  //choose the appropriate evaluation function
-  if (piece_count > 11) {
-    return (opn_eval ());
-  }
-  else if (piece_count < 5) {
-    return (end_eval ());
-  }
-  else {
-    return (mid_eval ());
-  }
+   if (white_to_move % 2 != 1) return -score;
+   return score;
 
 }

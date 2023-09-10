@@ -1,61 +1,75 @@
-/*
-MIT License
-
-Copyright (c) 2000 Adrien M. Regimbald
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
-
 /**************************************************
- * Faile version 1.4                              *
- * Author: Adrien Regimbald                       *
- * E-mail: adrien@ee.ualberta.ca                  *
- * Web Page: http://www.ee.ualberta.ca/~adrien/   *
+ *   Faile version 0.6                            *
+ *   Author: Adrien Regimbald                     *
+ *   E-mail: adrien@gpu.srv.ualberta.ca           *
+ *   Web Page: http://www.ualberta.ca/~adrien/    *
  *                                                *
- * File: extvars.h                                *
- * Purpose: holds global variables                *
+ *   File: Extvars.h                              *
+ *   Purpose: declare external variables          *
  **************************************************/
 
-extern char divider[50];
+#ifdef lines
+extern int line[20][2];
+extern int line_depth;
+extern FILE *lines_out;
+#endif
 
-extern int board[144], moved[144], ep_square, white_to_move, wking_loc,
-  bking_loc, white_castled, black_castled, result, ply, pv_length[PV_BUFF],
-  history_h[144][144], pieces[33], squares[144], num_pieces, i_depth, fifty,
-  fifty_move[PV_BUFF], game_ply;
+extern int white_to_move;
+extern Bool game_end;
+extern int castle_flag;
+extern long int nodes,qnodes;
+extern double search_time;
+extern Bool white_castled, black_castled;
+extern int wking_loc, bking_loc;
+extern int comp_color;
+extern End_of_game result;
+extern Bool new_game;
+extern int move_num;
+extern white_black history[];
+extern int ply;
+extern Bool captures;
+extern Bool time_failure, time_exit;
+extern time_t time0;
+extern double time_for_move;
+extern time_t search_start;
+extern double qnodes_perc;
+extern int pv_length[100];
+extern move_s pv[100][100];
+extern Bool searching_pv;
+extern int history_h[144][144];
+extern int iterative_depth;
+extern clock_t clock0;
+extern double clock_elapsed;
+extern move_s pv_empty[100][100];
+extern Bool xboard_mode;
+extern int num_pieces;
+extern int pieces[33];
+extern int squares[144];
+extern int current_score;
+extern Bool post;
+extern double time_left, increment;
+extern long int moves_to_tc, minutes_per_game;
+extern double time_cushion;
+extern double opp_time;
+extern char book[5000][81];
+extern int num_book_lines;
+extern int book_ply;
+extern Bool use_book;
+extern char opening_history[81];
+extern int rep_kludge[500][144];
+extern int rep_ply;
+extern int fifty_move[500];
+extern int fifty;
+extern move_s junk_move;
+extern move_s killer1[100];
+extern move_s killer2[100];
+extern int killer_scores[100];
+extern Bool is_endgame;
 
-extern long int nodes, raw_nodes, qnodes, piece_count, killer_scores[PV_BUFF],
-  killer_scores2[PV_BUFF], moves_to_tc, min_per_game, inc, time_left,
-  opp_time, time_cushion, time_for_move, cur_score, start_piece_count,
-  last_root_score;
 
-extern bool xb_mode, captures, searching_pv, post, time_exit, time_failure,
-  allow_more_time, bad_root_score;
+extern FILE *stream;
 
-extern move_s pv[PV_BUFF][PV_BUFF], dummy, killer1[PV_BUFF], killer2[PV_BUFF],
-  killer3[PV_BUFF];
+extern int board[144];
 
-extern rtime_t start_time;
+extern int moved[144];
 
-extern d_long h_values[14][144], ep_h_values[144], wck_h_values[2],
-  wcq_h_values[2], bck_h_values[2], bcq_h_values[2], color_h_values[2],
-  cur_pos, rep_history[PV_BUFF];
-
-extern hash_s *hash_table;
-
-extern unsigned long int hash_mask, hash_max_mb;

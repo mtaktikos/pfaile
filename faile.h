@@ -1,153 +1,94 @@
-/*
-MIT License
-
-Copyright (c) 2000 Adrien M. Regimbald
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
-
 /**************************************************
- * Faile version 1.4                              *
- * Author: Adrien Regimbald                       *
- * E-mail: adrien@ee.ualberta.ca                  *
- * Web Page: http://www.ee.ualberta.ca/~adrien/   *
+ *   Faile version 0.6                            *
+ *   Author: Adrien Regimbald                     *
+ *   E-mail: adrien@gpu.srv.ualberta.ca           *
+ *   Web Page: http://www.ualberta.ca/~adrien/    *
  *                                                *
- * File: faile.h                                  *
- * Purpose: holds defines & typedefs for various  *
- * parts of the program.                          *
+ *   File: Faile.h                                *
+ *   Purpose: Holds defines / typedefs for varied *
+ *   parts of the program.                        *
  **************************************************/
 
 #ifndef FAILE_H
 #define FAILE_H
 
-/* #define ANSI */
-
-#include <ctype.h>
-#include <signal.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <limits.h>
-
-#ifndef ANSI
-
-#include <sys/types.h>
-#include <sys/timeb.h>
-
-#ifndef WIN32
-#include <sys/time.h>
-struct timeval tv;
-#endif
-
-#endif
+#include <signal.h>
 
 #define NDEBUG
 #include <assert.h>
 
-#define maxdepth 30
-#define mindepth 3
-#define null_red 2
-#define FALSE 0
-#define TRUE 1
+#include <time.h>
+#include <ctype.h>
 
-/* define names for piece constants: */
-#define frame   0
-#define wpawn   1
-#define bpawn   2
-#define wknight 3
-#define bknight 4
-#define wking   5
-#define bking   6
-#define wrook   7
-#define brook   8
-#define wqueen  9
-#define bqueen  10
-#define wbishop 11
-#define bbishop 12
-#define npiece  13
+#define frame    0
+#define wpawn    1
+#define bpawn    2
+#define wknight  3
+#define bknight  4
+#define wking    5
+#define bking    6
+#define wrook    7
+#define brook    8
+#define wqueen   9
+#define bqueen   10
+#define wbishop  11
+#define bbishop  12
+#define npiece   13
+#define wep_piece 15
+#define bep_piece 16
 
-/* castle flags: */
-#define no_castle  0
-#define wck        1
-#define wcq        2
-#define bck        3
-#define bcq        4
+/* defines for castle_flag: */
 
-/* result flags: */
-#define no_result      0
-#define stalemate      1
-#define white_is_mated 2
-#define black_is_mated 3
-#define draw_by_fifty  4
-#define draw_by_rep    5
+#define wck 1
+#define wcq 2
+#define bck 3
+#define bcq 4
 
-/* hash flags: */
-#define no_info    0
-#define avoid_null 1
-#define exact      2
-#define u_bound    3
-#define l_bound    4
+/* hard-coded max depth for lightning... easier than mucking around with a
+   million #ifdefs for finding time, and even then, some systems can still
+   only use time(), so if you used only time() to guide you when you have < 1
+   minute left, you may spend too much time on moves! */
+#define lightning_depth 4
 
-#define rank(square) ((((square)-26)/12)+1)
-#define file(square) ((((square)-26)%12)+1)
+/* hard-coded max depth for search, used to ensure that we don't do check
+   extensions, or quiescence search forever: */
+#define Maxdepth 30
 
-typedef unsigned char s_int;
-typedef s_int bool;
+/* if lines is defined, all legal lines will be outputed to file lines.txt */
+/* #define lines */
+
+#define rank(squareid) ((((squareid) - 26) / 12) + 1)
+#define file(squareid) ((((squareid) - 26) % 12) + 1)
+#define TryOffset(x) do {try_move(&move2[0], n_moves, from, (from + (x)));}\
+   while(0)
+#define TrySlide(x) do {target = from + (x); while (try_move(&move2[0],\
+   n_moves, from, target)) {target += (x);}} while(0)
+
+/* file(26) == 1 && rank(26) == 1 */
 
 typedef struct {
-  bool ep;
-  s_int from;
-  s_int target;
-  s_int captured;
-  s_int promoted;
-  s_int castled;
-  s_int cap_num;
+   int from;
+   int target;
+   int captured;
+   int en_passant;
+   int promoted;
+   int castle;
+   int captured_number;
 } move_s;
 
-typedef struct {
-  unsigned long int x1;
-  unsigned long int x2;
-} d_long;
+
+/* a white/black move structure (of strings) for history: */
 
 typedef struct {
-  d_long hash;
-  s_int depth;
-  long int score;
-  move_s move;
-  s_int flag;
-} hash_s;
+   char white[6];
+   char black[6];
+} white_black;
 
-typedef enum {p_none, p_pawn, p_K, p_Q, p_R, p_N, p_B} piece_t;
+typedef enum {FALSE, TRUE} Bool;
 
-#ifndef ANSI
-typedef struct timeb rtime_t;
-#else
-typedef time_t rtime_t;
-#endif
-
-#define STR_BUFF 256
-#define MOVE_BUFF 200
-#define INF 1000000
-#define PV_BUFF 1000
-#define HASH_MB 8
-#define MAX_B_PLY 40
+typedef enum {no_mate, white_won, black_won, stalemate} End_of_game;
 
 #endif
-
